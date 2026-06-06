@@ -1251,8 +1251,8 @@ function renderProductBasis(scores) {
   const vramScore = scores.finalScore.VRAM || 0;
   productBasisDescription.textContent =
     gpuScore >= 2 || vramScore >= 2
-      ? "각 부품 후보는 위 기준이 실제 제품 스펙으로 어떻게 바뀌는지 보기 위한 테스트입니다. GPU와 VRAM이 높다면 그래픽카드 섹션을 특히 보면 좋아요."
-      : "각 섹션은 추천 확정이 아니라, 앞선 진단축과 제품 스펙이 어떻게 연결되는지 확인하기 위한 후보입니다.";
+      ? "각 부품 후보는 위 기준이 실제 제품 스펙으로 어떻게 바뀌는지 보여줍니다. GPU와 VRAM이 높다면 그래픽카드 섹션을 특히 보면 좋아요."
+      : "각 섹션은 앞선 진단 기준과 제품 스펙이 어떻게 연결되는지 확인하기 위한 후보입니다.";
 }
 
 function renderProductCards(container, products, scores) {
