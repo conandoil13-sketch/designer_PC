@@ -304,6 +304,73 @@ h2 {
   margin-top: 34px;
 }
 
+.tradeoff-panel {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.tradeoff-panel[hidden] {
+  display: none;
+}
+
+.tradeoff-option {
+  min-height: 118px;
+  padding: 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.tradeoff-option span {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.tradeoff-option strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.38;
+  word-break: keep-all;
+}
+
+.tradeoff-low span {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tradeoff-high span {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.tradeoff-vs {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.tradeoff-panel + .scale-options {
+  margin-top: 22px;
+}
+
 .scale-button {
   aspect-ratio: 1;
   border: 1px solid var(--line);

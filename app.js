@@ -33,6 +33,21 @@ const appDanawaRamSsdSamples = window.cpuMasterDanawaRamSsdSamples || {};
 const appDanawaMonitorSamples = window.cpuMasterDanawaMonitorSamples || {};
 const appProductInterpreter = window.cpuMasterProductInterpreter || {};
 
+const tradeoffQuestionOptions = {
+  23: {
+    low: "최종 출력이 조금 느려도 작업 중 조작이 부드러운 쪽",
+    high: "작업 중 약간 기다려도 렌더링·내보내기가 빠른 쪽",
+  },
+  24: {
+    low: "지금 작업에 필요한 성능만 맞추는 쪽",
+    high: "가격이 조금 올라가도 오래 쓸 여유를 남기는 쪽",
+  },
+  25: {
+    low: "본체 성능을 우선하고 모니터는 기본으로 맞추는 쪽",
+    high: "본체 성능을 조금 낮추더라도 모니터 품질을 우선하는 쪽",
+  },
+};
+
 function mergeProductSources(...sources) {
   const merged = [];
   const seen = new Set();
@@ -121,6 +136,9 @@ const progressText = document.querySelector("#progressText");
 const progressFill = document.querySelector("#progressFill");
 const scaleLowLabel = document.querySelector("#scaleLowLabel");
 const scaleHighLabel = document.querySelector("#scaleHighLabel");
+const tradeoffPanel = document.querySelector("#tradeoffPanel");
+const tradeoffLowText = document.querySelector("#tradeoffLowText");
+const tradeoffHighText = document.querySelector("#tradeoffHighText");
 const scaleButtons = Array.from(document.querySelectorAll(".scale-button"));
 const accordionCards = Array.from(document.querySelectorAll(".accordion-card"));
 const termSheetBackdrop = document.querySelector("#termSheetBackdrop");
@@ -1420,11 +1438,17 @@ function renderProgramSelection() {
 function renderQuestion() {
   const currentAnswer = answers[currentQuestionIndex];
   const [lowLabel, highLabel] = surveyScaleLabels[currentQuestionIndex];
+  const tradeoffOption = tradeoffQuestionOptions[currentQuestionIndex + 1];
   questionText.textContent = surveyQuestions[currentQuestionIndex];
   progressText.textContent = `${currentQuestionIndex + 1} / ${surveyQuestions.length}`;
   progressFill.style.width = `${((currentQuestionIndex + 1) / surveyQuestions.length) * 100}%`;
   scaleLowLabel.textContent = lowLabel;
   scaleHighLabel.textContent = highLabel;
+  tradeoffPanel.hidden = !tradeoffOption;
+  if (tradeoffOption) {
+    tradeoffLowText.textContent = tradeoffOption.low;
+    tradeoffHighText.textContent = tradeoffOption.high;
+  }
   nextButton.disabled = currentAnswer === null;
   nextButton.textContent =
     currentQuestionIndex === surveyQuestions.length - 1 ? "분석하기" : "다음";

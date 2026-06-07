@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>디자이너 PC 기준 찾기</title>
-    <link rel="stylesheet" href="styles.css?v=75" />
+    <link rel="stylesheet" href="styles.css?v=78" />
   </head>
   <body>
     <main class="app-shell">
@@ -94,6 +94,17 @@
 
           <div class="question-body">
             <h2 id="questionText">A</h2>
+            <div id="tradeoffPanel" class="tradeoff-panel" hidden>
+              <div class="tradeoff-option tradeoff-low">
+                <span>1점 쪽</span>
+                <strong id="tradeoffLowText">작업 중 조작이 부드러운 쪽</strong>
+              </div>
+              <div class="tradeoff-vs" aria-hidden="true">VS</div>
+              <div class="tradeoff-option tradeoff-high">
+                <span>5점 쪽</span>
+                <strong id="tradeoffHighText">렌더링·내보내기가 빠른 쪽</strong>
+              </div>
+            </div>
             <div id="scaleOptions" class="scale-options" aria-label="5점 척도">
               <button class="scale-button" type="button" data-score="1">1</button>
               <button class="scale-button" type="button" data-score="2">2</button>
@@ -313,24 +324,24 @@
         document.body.dataset.appError = String(event.reason);
       });
     </script>
-    <script src="data.js?v=75"></script>
-    <script src="programSpecs.js?v=75"></script>
-    <script src="mockProducts.js?v=75"></script>
-    <script src="shopDanawaGpuLiveData.js?v=75"></script>
-    <script src="danawaGpuLiveData.js?v=75"></script>
-    <script src="shopDanawaCpuLiveData.js?v=75"></script>
-    <script src="danawaCpuLiveData.js?v=75"></script>
-    <script src="shopDanawaRamLiveData.js?v=75"></script>
-    <script src="danawaRamLiveData.js?v=75"></script>
-    <script src="shopDanawaSsdLiveData.js?v=75"></script>
-    <script src="danawaSsdLiveData.js?v=75"></script>
-    <script src="shopDanawaMonitorLiveData.js?v=75"></script>
-    <script src="danawaMonitorLiveData.js?v=75"></script>
-    <script src="danawaGpuSamples.js?v=75"></script>
-    <script src="danawaCpuSamples.js?v=75"></script>
-    <script src="danawaRamSsdSamples.js?v=75"></script>
-    <script src="danawaMonitorSamples.js?v=75"></script>
-    <script src="productInterpreter.js?v=75"></script>
-    <script src="app.js?v=75"></script>
+    <script src="data.js?v=78"></script>
+    <script src="programSpecs.js?v=78"></script>
+    <script src="mockProducts.js?v=78"></script>
+    <script src="shopDanawaGpuLiveData.js?v=78"></script>
+    <script src="danawaGpuLiveData.js?v=78"></script>
+    <script src="shopDanawaCpuLiveData.js?v=78"></script>
+    <script src="danawaCpuLiveData.js?v=78"></script>
+    <script src="shopDanawaRamLiveData.js?v=78"></script>
+    <script src="danawaRamLiveData.js?v=78"></script>
+    <script src="shopDanawaSsdLiveData.js?v=78"></script>
+    <script src="danawaSsdLiveData.js?v=78"></script>
+    <script src="shopDanawaMonitorLiveData.js?v=78"></script>
+    <script src="danawaMonitorLiveData.js?v=78"></script>
+    <script src="danawaGpuSamples.js?v=78"></script>
+    <script src="danawaCpuSamples.js?v=78"></script>
+    <script src="danawaRamSsdSamples.js?v=78"></script>
+    <script src="danawaMonitorSamples.js?v=78"></script>
+    <script src="productInterpreter.js?v=78"></script>
+    <script src="app.js?v=78"></script>
   </body>
 </html>
