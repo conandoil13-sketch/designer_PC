@@ -1948,6 +1948,7 @@ function openChipPreferenceModal() {
     startLoading();
     return;
   }
+  chipPreferenceModal.hidden = false;
   chipPreferenceModal.classList.add("open");
   chipPreferenceModal.setAttribute("aria-hidden", "false");
 }
@@ -1956,6 +1957,7 @@ function closeChipPreferenceModal() {
   if (!chipPreferenceModal) return;
   chipPreferenceModal.classList.remove("open");
   chipPreferenceModal.setAttribute("aria-hidden", "true");
+  chipPreferenceModal.hidden = true;
 }
 
 function startLoading() {
