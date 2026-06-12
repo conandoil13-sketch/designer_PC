@@ -32,6 +32,7 @@ const appDanawaCpuSamples = window.cpuMasterDanawaCpuSamples || {};
 const appDanawaRamSsdSamples = window.cpuMasterDanawaRamSsdSamples || {};
 const appDanawaMonitorSamples = window.cpuMasterDanawaMonitorSamples || {};
 const appProductInterpreter = window.cpuMasterProductInterpreter || {};
+const ENABLE_SIMPLE_RESULT_SCREEN = false;
 
 const tradeoffQuestionOptions = {
   23: {
@@ -116,8 +117,8 @@ const productCatalog = appProductCatalog.diagnosisProducts || {};
 const answers = Array(surveyQuestions.length).fill(null);
 
 let currentQuestionIndex = 0;
-const primaryPrograms = new Set();
-const usedPrograms = new Set();
+const programUsageScores = new Map();
+let chipPreference = "all";
 
 const startScreen = document.querySelector("#startScreen");
 const programScreen = document.querySelector("#programScreen");
@@ -125,11 +126,13 @@ const questionScreen = document.querySelector("#questionScreen");
 const loadingScreen = document.querySelector("#loadingScreen");
 const resultScreen = document.querySelector("#resultScreen");
 const productScreen = document.querySelector("#productScreen");
+const loadingStepText = document.querySelector("#loadingStepText");
+const loadingStepList = document.querySelector("#loadingStepList");
 const startButton = document.querySelector("#startButton");
 const programNextButton = document.querySelector("#programNextButton");
 const productBackButton = document.querySelector("#productBackButton");
 const programHelper = document.querySelector("#programHelper");
-const programButtons = Array.from(document.querySelectorAll(".program-option"));
+const programRows = Array.from(document.querySelectorAll(".program-rating-row"));
 const nextButton = document.querySelector("#nextButton");
 const questionText = document.querySelector("#questionText");
 const progressText = document.querySelector("#progressText");
@@ -145,14 +148,20 @@ const termSheetBackdrop = document.querySelector("#termSheetBackdrop");
 const termTitle = document.querySelector("#termTitle");
 const termDescription = document.querySelector("#termDescription");
 const termCloseButton = document.querySelector("#termCloseButton");
+const chipPreferenceModal = document.querySelector("#chipPreferenceModal");
+const chipPreferenceButtons = Array.from(document.querySelectorAll("[data-chip-preference]"));
 const profileTitle = document.querySelector("#profileTitle");
 const profileDescription = document.querySelector("#profileDescription");
 const profileTags = document.querySelector("#profileTags");
+const productProfileTitle = document.querySelector("#productProfileTitle");
+const productProfileDescription = document.querySelector("#productProfileDescription");
+const productProfileTags = document.querySelector("#productProfileTags");
 const priorityContent = document.querySelector("#priorityContent");
 const holdContent = document.querySelector("#holdContent");
 const prioritySummary = document.querySelector("#prioritySummary");
 const holdSummary = document.querySelector("#holdSummary");
-const productSearchButton = document.querySelector(".floating-action");
+const simpleResultButtons = Array.from(document.querySelectorAll('[data-action="show-simple-result"]'));
+const productResultButtons = Array.from(document.querySelectorAll('[data-action="show-product-result"]'));
 const productBasisSummary = document.querySelector("#productBasisSummary");
 const productBasisDescription = document.querySelector("#productBasisDescription");
 const productListContainers = {
@@ -162,12 +171,13 @@ const productListContainers = {
   ssd: document.querySelector("#ssdProductList"),
   monitor: document.querySelector("#monitorProductList"),
 };
-const productScrollIndicators = Object.fromEntries(
+const productSectionContainers = Object.fromEntries(
   Object.entries(productListContainers).map(([category, container]) => [
     category,
-    container?.closest(".product-section")?.querySelector(".product-scroll-indicator") || null,
+    container?.closest(".product-section") || null,
   ]),
 );
+const estimateLinkSection = document.querySelector(".estimate-link-section");
 
 function createEmptyScore() {
   return scoreFields.reduce((score, field) => {
@@ -190,21 +200,39 @@ function getScoreLevelLabel(score) {
   return "낮음";
 }
 
-function getProgramRoleMultiplier(program) {
-  if (primaryPrograms.has(program)) return 1;
-  if (usedPrograms.has(program)) return 0.5;
-  return 0;
+function getProgramUsageScore(program) {
+  return programUsageScores.get(program) || 1;
+}
+
+function getProgramUsageMultiplier(program) {
+  return (getProgramUsageScore(program) - 1) / 4;
+}
+
+function getHighUsagePrograms(threshold = 3) {
+  return programRows
+    .map((row) => row.dataset.program)
+    .filter((program) => getProgramUsageScore(program) >= threshold);
+}
+
+function isProgramPrimary(program) {
+  return getProgramUsageScore(program) >= 5;
+}
+
+function isProgramFrequent(program) {
+  return getProgramUsageScore(program) >= 4;
 }
 
 function calculateProgramScores() {
   const programScore = createEmptyScore();
-  const selectedPrograms = Array.from(new Set([...usedPrograms, ...primaryPrograms]));
+  const selectedPrograms = programRows
+    .map((row) => row.dataset.program)
+    .filter((program) => getProgramUsageMultiplier(program) > 0);
 
   scoreFields.forEach((field) => {
     const fieldValues = selectedPrograms
       .map((program) => {
         const weights = programWeightPresets[program];
-        const multiplier = getProgramRoleMultiplier(program);
+        const multiplier = getProgramUsageMultiplier(program);
         return weights ? (weights[field] || 0) * multiplier : 0;
       })
       .filter((value) => value > 0);
@@ -283,13 +311,13 @@ function calculateFinalScores() {
 }
 
 function getSelectedPrograms() {
-  return Array.from(new Set([...usedPrograms, ...primaryPrograms]));
+  return getHighUsagePrograms(3);
 }
 
 function getProgramBoost(pattern) {
   return getSelectedPrograms().reduce((boost, program) => {
     const baseBoost = pattern.programBoosts?.[program] || 0;
-    return boost + baseBoost * getProgramRoleMultiplier(program);
+    return boost + baseBoost * getProgramUsageMultiplier(program);
   }, 0);
 }
 
@@ -314,7 +342,7 @@ function getAverageAnswer(questionNumbers = []) {
 function getProfileContextBonus(profileId, finalScore) {
   if (profileId !== "TWO_D_HEAVY") return 0;
 
-  const hasTwoDPrimary = twoDHeavyPrograms.some((program) => primaryPrograms.has(program));
+  const hasTwoDPrimary = twoDHeavyPrograms.some(isProgramPrimary);
   const hasTwoDProgram = hasSelectedProgramIn(twoDHeavyPrograms);
   if (!hasTwoDProgram) return 0;
 
@@ -333,7 +361,7 @@ function getProfileContextBonus(profileId, finalScore) {
 }
 
 function hasAnyProgram(programs = []) {
-  return programs.some((program) => primaryPrograms.has(program) || usedPrograms.has(program));
+  return programs.some((program) => getProgramUsageScore(program) >= 3);
 }
 
 function matchesNameCondition(condition, finalScore) {
@@ -440,7 +468,7 @@ function getProgramContext(field) {
         program,
         context,
         category: specGuide?.category,
-        isPrimary: primaryPrograms.has(program),
+        isPrimary: isProgramPrimary(program),
       };
     })
     .filter(Boolean)
@@ -526,6 +554,8 @@ function removeProductNameFromSentence(text, productName) {
 }
 
 const termReplacementRules = [
+  { pattern: /로컬 AI 이미지 생성/g, key: "localAi" },
+  { pattern: /웹 기반 AI 이미지 생성/g, key: "webAi" },
   { pattern: /Quick Sync/g, key: "quickSync" },
   { pattern: /CUDA \/ Tensor/g, key: "tensor" },
   { pattern: /CUDA·Tensor/g, key: "tensor" },
@@ -534,9 +564,16 @@ const termReplacementRules = [
   { pattern: /NVENC/g, key: "nvenc" },
   { pattern: /AV1/g, key: "av1" },
   { pattern: /VRAM/g, key: "vram" },
+  { pattern: /DDR5|DDR4|DDR/g, key: "ddrMemory" },
   { pattern: /NVMe SSD/g, key: "nvme" },
   { pattern: /NVMe/g, key: "nvme" },
   { pattern: /M\.2/g, key: "m2" },
+  { pattern: /CPU 소켓/g, key: "cpuSocket" },
+  { pattern: /메인보드/g, key: "motherboard" },
+  { pattern: /그래픽카드/g, key: "graphicsCard" },
+  { pattern: /파워서플라이/g, key: "powerSupply" },
+  { pattern: /권장 파워|파워 용량|파워/g, key: "powerSupply" },
+  { pattern: /칩셋/g, key: "chipset" },
   { pattern: /PCIe/g, key: "pcie" },
   { pattern: /sRGB/g, key: "srgb" },
   { pattern: /DCI-P3/g, key: "dcip3" },
@@ -551,6 +588,11 @@ const termReplacementRules = [
   { pattern: /통풍/g, key: "airflow" },
   { pattern: /GPU 가속/g, key: "gpuAccel" },
   { pattern: /SSD 캐시/g, key: "ssdCache" },
+  { pattern: /RAM 슬롯/g, key: "ramSlot" },
+  { pattern: /슬롯/g, key: "ramSlot" },
+  { pattern: /CPU/g, key: "cpu" },
+  { pattern: /SSD/g, key: "ssd" },
+  { pattern: /쿨러/g, key: "cooler" },
   { pattern: /RAM/g, key: "ram" },
 ];
 
@@ -683,8 +725,7 @@ function renderProfileResult(scores) {
   renderAxisCards(holdContent, lowAxes, "hold", topAxes);
 }
 
-function renderResult() {
-  const scores = calculateFinalScores();
+function renderResult(scores = calculateFinalScores()) {
   renderProfileResult(scores);
 }
 
@@ -732,6 +773,267 @@ const productSpecLabels = {
   resolution: "해상도",
 };
 
+const productSpecAxisMap = {
+  gpu: {
+    vram: "VRAM",
+    cudaTier: "GPU",
+    rawGpuPower: "GPU",
+    coolingDifficulty: "COOL",
+  },
+  cpu: {
+    cores: "CM",
+    boost: "CS",
+    power: "COOL",
+  },
+  ram: {
+    capacity: "RAM",
+    speed: "RAM",
+    expand: "RAM",
+  },
+  ssd: {
+    capacity: "SSD_C",
+    speed: "SSD_S",
+    form: "SSD_S",
+  },
+  monitor: {
+    size: "MON_S",
+    resolution: "MON_S",
+    color: "MON_C",
+    panel: "MON_C",
+  },
+};
+
+const productSpecDescriptions = {
+  gpu: {
+    vram: "고해상도 이미지, 여러 레이어, 로컬 AI 작업처럼 그래픽 메모리를 오래 잡아두는 작업에서 여유를 봅니다.",
+    cudaTier: "GPU 가속을 쓰는 영상 효과, 렌더링, 일부 AI 작업에서 체감 차이를 만들 수 있습니다.",
+    rawGpuPower: "미리보기 안정성과 GPU 가속 처리량을 함께 볼 때 참고하는 기본 성능입니다.",
+    coolingDifficulty: "전력과 발열 부담이 높을수록 파워, 케이스 통풍, 소음까지 같이 확인해야 합니다.",
+  },
+  cpu: {
+    cores: "렌더링, 인코딩, 여러 앱 동시 작업에서 버티는 힘을 볼 때 참고합니다.",
+    boost: "필터 적용, 타임라인 조작, 앱 반응성처럼 순간 처리에 영향을 주는 기준입니다.",
+    power: "전력 기준은 발열, 소음, 쿨러와 파워 여유를 함께 확인하기 위한 항목입니다.",
+  },
+  ram: {
+    capacity: "대형 PSD, 영상 편집, 브라우저와 앱 동시 실행에서 작업 여유를 좌우합니다.",
+    speed: "체감 차이는 제한적일 수 있지만 CPU와 메인보드 조합을 볼 때 참고하면 좋습니다.",
+    expand: "나중에 용량을 늘릴 수 있는지 확인할 때 보는 기준입니다.",
+  },
+  ssd: {
+    capacity: "소스 파일, 캐시, 프로젝트 파일을 함께 둘 때 작업 공간의 여유를 봅니다.",
+    speed: "캐시, 프록시, 대용량 파일 이동에서 작업 흐름이 막히는지 판단할 때 봅니다.",
+    form: "메인보드 슬롯 호환과 발열판 장착 가능성을 확인하기 위한 기본 정보입니다.",
+  },
+  monitor: {
+    size: "작업 창, 타임라인, 레퍼런스를 동시에 펼칠 수 있는 화면 공간을 봅니다.",
+    resolution: "작은 글자, 얇은 선, 이미지 디테일을 확인하는 데 영향을 줍니다.",
+    color: "색 확인이 중요한 디자인과 영상 작업에서 먼저 볼 만한 기준입니다.",
+    panel: "색, 시야각, 반응 특성의 기본 방향을 확인할 때 참고합니다.",
+  },
+};
+
+const productSpecCheckpoints = {
+  gpu: {
+    vram: "4K 영상, 모션, 로컬 AI 작업이면 여유 있는 VRAM을 우선 확인하세요.",
+    cudaTier: "같은 세대라면 CUDA 코어 수와 실제 벤치 성능을 함께 보세요.",
+    rawGpuPower: "가격 차이가 크다면 GPU 성능보다 VRAM, 전력, 전체 구성 균형을 같이 보세요.",
+    coolingDifficulty: "케이스 길이, 권장 파워, 쿨링 리뷰를 함께 확인하세요.",
+  },
+  cpu: {
+    cores: "렌더링과 인코딩 비중이 크면 멀티코어 벤치마크를 같이 보세요.",
+    boost: "작업 중 반응성이 중요하면 싱글코어 벤치마크를 확인하세요.",
+    power: "장시간 작업이 많다면 쿨러와 메인보드 전원부 여유를 같이 보세요.",
+  },
+  ram: {
+    capacity: "동시에 여는 파일과 앱이 많다면 용량을 먼저 확인하세요.",
+    speed: "CPU와 메인보드가 지원하는 규격인지 확인하세요.",
+    expand: "남는 슬롯과 최대 지원 용량을 같이 보세요.",
+  },
+  ssd: {
+    capacity: "캐시와 프로젝트 파일을 한 드라이브에 둘지 먼저 정하세요.",
+    speed: "대용량 파일을 자주 다룬다면 실제 지속 쓰기 성능도 보세요.",
+    form: "메인보드 M.2 슬롯 규격과 방열판 간섭을 확인하세요.",
+  },
+  monitor: {
+    size: "책상 거리와 해상도를 같이 봐야 글자 크기가 편합니다.",
+    resolution: "해상도가 높을수록 GPU 부담과 글자 배율 설정도 함께 보세요.",
+    color: "색 작업이 많다면 색역, 캘리브레이션, 패널 균일도를 같이 보세요.",
+    panel: "영상, 디자인, 게임 비중에 따라 패널 특성의 우선순위가 달라집니다.",
+  },
+};
+
+function getProductSpecAxis(product, label) {
+  return productSpecAxisMap[product.category]?.[label] || null;
+}
+
+function getFallbackSpecInsightDescription(product, label) {
+  return (
+    productSpecDescriptions[product.category]?.[label] ||
+    "이 스펙은 작업 흐름에서 병목이 생길 가능성을 확인하기 위한 참고 기준입니다."
+  );
+}
+
+function getSpecNeedLevel(product, label, recommendation, finalScore = {}) {
+  const field = getProductSpecAxis(product, label);
+  const comparison = recommendation.axisComparisons.find((item) => item.field === field);
+  const score = comparison?.userScore ?? finalScore[field] ?? 0;
+  if (score >= 2) return "high";
+  if (score >= 1.2) return "medium";
+  return "low";
+}
+
+function getFrequentProgramNames(limit = 2) {
+  return getHighUsagePrograms(4)
+    .map((program) => programLabels[program] || program)
+    .slice(0, limit);
+}
+
+function makeProgramContextText(fallback = "현재 작업") {
+  const programs = getFrequentProgramNames(2);
+  if (programs.length === 0) return fallback;
+  return programs.join("과 ");
+}
+
+function getProductSpecInsightDescription(product, label, recommendation, finalScore = {}) {
+  const needLevel = getSpecNeedLevel(product, label, recommendation, finalScore);
+  const programText = makeProgramContextText();
+  const isLocalAiOrVideo = hasSelectedProgramIn([
+    "로컬 AI 이미지 생성",
+    "Premiere Pro",
+    "After Effects",
+    "DaVinci Resolve",
+    "Blender",
+    "Cinema 4D",
+  ]);
+
+  if (product.category === "gpu" && label === "vram") {
+    if (needLevel === "high") {
+      return isLocalAiOrVideo
+        ? `로컬 AI 이미지 생성이나 영상 편집처럼 그래픽카드 작업 공간을 오래 쓰는 흐름이 보여서, VRAM 여유를 먼저 확인하는 편이 좋습니다.`
+        : "고해상도 이미지나 여러 레이어를 자주 다루는 응답이라, VRAM 부족이 프리뷰와 저장 흐름을 답답하게 만들 수 있습니다.";
+    }
+    if (needLevel === "medium") {
+      return "당장 최상급 VRAM까지 볼 필요는 낮지만, 고해상도 소스와 여러 앱을 함께 쓰는 순간을 대비해 중간 이상 여유를 보면 좋습니다.";
+    }
+    return "지금 답변 기준에서는 VRAM을 과하게 올리기보다, 가격과 전체 부품 균형을 먼저 보는 편이 좋습니다.";
+  }
+
+  if (product.category === "gpu" && label === "cudaTier") {
+    if (needLevel === "high") {
+      return "GPU 가속이나 로컬 AI 이미지 생성처럼 반복 계산을 그래픽카드에 맡기는 작업 비중이 있어, CUDA 성능을 함께 봐야 합니다.";
+    }
+    if (needLevel === "medium") {
+      return "GPU 가속을 쓰는 순간은 있지만 매번 병목이 되는 유형은 아니라, CUDA 숫자만 단독으로 보기보다 실제 앱 벤치와 함께 보면 좋습니다.";
+    }
+    return "현재 흐름에서는 CUDA 코어 수보다 가격, VRAM, 전력 균형이 더 먼저 볼 기준입니다.";
+  }
+
+  if (product.category === "cpu" && label === "cores") {
+    if (needLevel === "high") {
+      return "렌더링과 인코딩, 여러 앱을 동시에 여는 흐름이 있어 CPU 멀티코어 성능이 작업 시간을 줄이는 데 영향을 줄 수 있습니다.";
+    }
+    if (needLevel === "medium") {
+      return "가끔 무거운 출력 작업이 섞이는 편이라, 코어 수는 기본 이상으로 보되 최상위 CPU까지 고집할 필요는 낮습니다.";
+    }
+    return "지금 답변에서는 CPU 멀티코어보다 작업 중 반응성, RAM, SSD 균형을 먼저 보는 편이 좋습니다.";
+  }
+
+  if (product.category === "cpu" && label === "boost") {
+    if (needLevel === "high") {
+      return "작업 중 조작감과 앱 반응성이 중요한 응답이라, 싱글코어 성능과 부스트 클럭을 같이 확인하면 좋습니다.";
+    }
+    if (needLevel === "medium") {
+      return "기본 반응성은 중요하지만 부스트 숫자만 높다고 항상 체감이 커지는 것은 아니라, 세대와 실제 앱 리뷰를 함께 보세요.";
+    }
+    return "부스트 클럭은 참고 정도로 보고, 현재는 예산을 더 체감 큰 부품에 배분해도 괜찮습니다.";
+  }
+
+  if (product.category === "ram" && label === "capacity") {
+    if (needLevel === "high") {
+      return `${programText}처럼 여러 파일과 앱을 함께 켜는 흐름이 있어, RAM 용량 여유가 멀티태스킹 체감에 직접 영향을 줄 수 있습니다.`;
+    }
+    if (needLevel === "medium") {
+      return "작업량이 커질 때를 대비해 RAM은 너무 타이트하게 잡지 않는 편이 좋습니다.";
+    }
+    return "현재 답변에서는 대용량 RAM보다 기본 용량과 가격 균형을 먼저 맞춰도 괜찮습니다.";
+  }
+
+  if (product.category === "ssd" && label === "speed") {
+    if (needLevel === "high") {
+      return "큰 소스 파일, 캐시, 프로젝트 파일을 자주 읽고 쓰는 응답이라 NVMe SSD 속도가 작업 흐름을 덜 끊기게 해줄 수 있습니다.";
+    }
+    if (needLevel === "medium") {
+      return "SSD 속도는 체감될 수 있지만, 최고 속도보다 충분한 용량과 안정적인 모델인지 함께 보는 편이 좋습니다.";
+    }
+    return "지금은 최상급 SSD 속도보다 용량, 가격, 브랜드 안정성을 먼저 봐도 충분합니다.";
+  }
+
+  if (product.category === "monitor" && label === "color") {
+    if (needLevel === "high") {
+      return "색 확인 비중이 높게 나와서 sRGB, DCI-P3, Delta E 같은 색 정확도 정보를 우선 확인하는 편이 좋습니다.";
+    }
+    if (needLevel === "medium") {
+      return "색 품질은 중요하지만 전문 색보정 모델까지 고집하기보다 IPS 패널과 기본 색역을 먼저 보면 좋습니다.";
+    }
+    return "현재 답변에서는 고급 색역보다 화면 크기, 해상도, 본체 성능 균형이 더 중요할 수 있습니다.";
+  }
+
+  return getFallbackSpecInsightDescription(product, label);
+}
+
+function getProductSpecCheckpoint(product, label, recommendation, finalScore = {}) {
+  const needLevel = getSpecNeedLevel(product, label, recommendation, finalScore);
+  if (product.category === "gpu" && label === "vram" && needLevel === "low") {
+    return "VRAM 숫자만 올리기보다 GPU 성능, 가격, 파워 여유를 함께 확인하세요.";
+  }
+  if (product.category === "cpu" && label === "cores" && needLevel === "low") {
+    return "멀티코어 벤치보다 싱글코어 체감 리뷰와 전체 예산 균형을 먼저 보세요.";
+  }
+  if (product.category === "monitor" && label === "color" && needLevel === "high") {
+    return "sRGB, DCI-P3, Delta E와 공장 색보정 여부를 함께 확인하세요.";
+  }
+
+  return (
+    productSpecCheckpoints[product.category]?.[label] ||
+    "제품 상세 페이지의 세부 규격과 실제 사용 후기를 함께 확인하세요."
+  );
+}
+
+function getProductSpecImportance(product, label, recommendation) {
+  const field = getProductSpecAxis(product, label);
+  const comparison = recommendation.axisComparisons.find((item) => item.field === field);
+  const userScore = comparison?.userScore || 0;
+  const productScore = comparison?.productScore || 0;
+  const score = Math.max(userScore, Math.min(3, productScore));
+
+  if (score >= 2.25) return { label: "매우 중요", tone: "critical" };
+  if (score >= 1.6) return { label: "중요", tone: "warning" };
+  if (score >= 1.05) return { label: "보조 지표", tone: "support" };
+  return { label: "참고", tone: "reference" };
+}
+
+function getProductSpecInsightItems(product, recommendation, finalScore = {}) {
+  return Object.entries(product.specSummary || {})
+    .slice(0, 4)
+    .map(([label, value]) => {
+      const importance = getProductSpecImportance(product, label, recommendation);
+      return {
+        title: productSpecLabels[label] || label,
+        value,
+        importanceLabel: importance.label,
+        importanceTone: importance.tone,
+        description: getProductSpecInsightDescription(product, label, recommendation, finalScore),
+        checkpoint: getProductSpecCheckpoint(product, label, recommendation, finalScore),
+      };
+    });
+}
+
+function getProductPriceLabel(product) {
+  const price = product.sourceData?.price ?? product.price;
+  return typeof price === "number" && price > 0 ? `${price.toLocaleString("ko-KR")}원` : "가격 미확인";
+}
+
 function getProductSearchText(product) {
   return [
     product.name,
@@ -759,8 +1061,8 @@ function getCpuAgePenalty(product) {
 }
 
 function isLightWebAiProfile(finalScore = {}) {
-  const webAiPrimary = primaryPrograms.has("웹 기반 AI 이미지 생성");
-  const webReferencePrimary = primaryPrograms.has("웹/레퍼런스 중심 작업");
+  const webAiPrimary = isProgramFrequent("웹 기반 AI 이미지 생성");
+  const webReferencePrimary = isProgramFrequent("웹/레퍼런스 중심 작업");
   const localGpuWork = hasSelectedProgramIn(["로컬 AI 이미지 생성", "Blender", "Cinema 4D", "DaVinci Resolve"]);
   return (
     (webAiPrimary || webReferencePrimary) &&
@@ -815,7 +1117,7 @@ const monitorSpacePrograms = ["Figma", "웹/레퍼런스 중심 작업", "Premie
 const monitorColorPrograms = ["Photoshop", "Illustrator", "InDesign", "DaVinci Resolve", "웹 기반 AI 이미지 생성"];
 
 function hasSelectedProgramIn(programs = []) {
-  return programs.some((program) => primaryPrograms.has(program) || usedPrograms.has(program));
+  return programs.some((program) => getProgramUsageScore(program) >= 3);
 }
 
 function getMonitorAxisWeights(finalScore) {
@@ -838,7 +1140,7 @@ function getMonitorAxisWeights(finalScore) {
     colorWeight += 0.1;
     spaceWeight -= 0.1;
   }
-  if (videoPrograms.some((program) => primaryPrograms.has(program))) {
+  if (videoPrograms.some(isProgramFrequent)) {
     colorWeight += 0.04;
     spaceWeight -= 0.04;
   }
@@ -1166,10 +1468,10 @@ function shouldMentionMonitorRefresh(product) {
   if ((product.specs?.refreshHz || 0) < 100) return false;
 
   const selectedVideoProgramCount = videoPrograms.filter((program) =>
-    primaryPrograms.has(program) || usedPrograms.has(program),
+    getProgramUsageScore(program) >= 3,
   ).length;
 
-  return videoPrograms.some((program) => primaryPrograms.has(program)) || selectedVideoProgramCount >= 2;
+  return videoPrograms.some(isProgramFrequent) || selectedVideoProgramCount >= 2;
 }
 
 function getMonitorRefreshNote(product) {
@@ -1227,11 +1529,123 @@ function getProductDynamicWarning(recommendation, finalScore) {
   return product.overkillWarning;
 }
 
+function getProgramProductFitScore(program, product) {
+  const productAxisWeights = productFitAxisWeightsByCategory[product.category] || {};
+  const productAxes = Object.keys(productAxisWeights);
+  const programKnowledge = appProgramKnowledge[program] || {};
+  const relevantAxes = productAxes.filter((axis) => programKnowledge[axis]);
+
+  if (relevantAxes.length === 0) {
+    return {
+      program,
+      score: 0,
+      relevantAxes,
+      label: programLabels[program] || program,
+    };
+  }
+
+  const weightedScore = relevantAxes.reduce((sum, axis) => {
+    const needWeight = programWeightPresets[program]?.[axis] || 1;
+    const productScore = product.axisScores?.[axis] || 0;
+    return sum + productScore * needWeight;
+  }, 0);
+  const weightTotal = relevantAxes.reduce(
+    (sum, axis) => sum + (programWeightPresets[program]?.[axis] || 1),
+    0,
+  );
+
+  return {
+    program,
+    score: weightTotal ? weightedScore / weightTotal : 0,
+    relevantAxes,
+    label: programLabels[program] || program,
+  };
+}
+
+function getProductProgramFitGroups(product) {
+  const selectedPrograms = getHighUsagePrograms(3);
+  const sourcePrograms = selectedPrograms.length > 0 ? selectedPrograms : getHighUsagePrograms(1);
+  const rankedPrograms = sourcePrograms
+    .map((program) => getProgramProductFitScore(program, product))
+    .sort((a, b) => {
+      const usageDiff = getProgramUsageScore(b.program) - getProgramUsageScore(a.program);
+      if (usageDiff !== 0) return usageDiff;
+      return b.score - a.score;
+    });
+
+  const goodPrograms = rankedPrograms
+    .filter((item) => item.relevantAxes.length > 0 && item.score >= 1.55)
+    .slice(0, 3);
+  let lessPrograms = rankedPrograms
+    .filter((item) => !goodPrograms.some((good) => good.program === item.program))
+    .filter((item) => item.relevantAxes.length === 0 || item.score < 1.55)
+    .slice(0, 3);
+
+  if (lessPrograms.length === 0) {
+    lessPrograms = rankedPrograms
+      .filter((item) => !goodPrograms.some((good) => good.program === item.program))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 2);
+  }
+
+  return {
+    good: goodPrograms,
+    less: lessPrograms,
+  };
+}
+
+function renderProgramFitChips(programs, emptyText) {
+  if (!programs.length) {
+    return `<span class="program-fit-empty">${escapeHtml(emptyText)}</span>`;
+  }
+
+  return programs
+    .map((item) => `<span class="program-fit-chip">${escapeHtml(item.label)}</span>`)
+    .join("");
+}
+
 function isProductInRecommendationPool(product) {
   if (isCpuOutsideDesignerPool(product)) return false;
   const eligibility = product.sourceData?.qualityFlags?.recommendationEligibility;
   if (!eligibility) return true;
   return !eligibility.hardRejected && !eligibility.referenceOnly;
+}
+
+function getProductSearchText(product) {
+  return [
+    product.name,
+    product.brand,
+    product.chipBrand,
+    product.sourceData?.rawName,
+    product.sourceData?.rawSpecText,
+    product.sourceData?.searchKeyword,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isIntelProduct(product) {
+  return /intel|인텔|core\s|코어\s/i.test(getProductSearchText(product));
+}
+
+function isNvidiaProduct(product) {
+  return /nvidia|엔비디아|geforce|rtx|gtx/i.test(getProductSearchText(product));
+}
+
+function filterProductsByChipPreference(products, category) {
+  if (chipPreference !== "intel-nvidia") return products;
+  if (category !== "cpu" && category !== "gpu") return products;
+
+  const preferredProducts = products.filter((product) =>
+    category === "cpu" ? isIntelProduct(product) : isNvidiaProduct(product),
+  );
+  if (preferredProducts.length >= Math.min(3, products.length)) return preferredProducts;
+
+  const preferredIds = new Set(preferredProducts.map((product) => product.id || product.name));
+  return [
+    ...preferredProducts,
+    ...products.filter((product) => !preferredIds.has(product.id || product.name)),
+  ];
 }
 
 function calculateProductRecommendations(products, finalScore) {
@@ -1253,7 +1667,14 @@ function calculateProductRecommendations(products, finalScore) {
 function renderProductBasis(scores) {
   if (!productBasisSummary || !productBasisDescription) return;
 
+  const profile = calculateProfileResult(scores.finalScore);
+  const tags = makeTags(scores.finalScore, profile.id);
   const topAxes = getSortedAxes(scores.finalScore).slice(0, 3);
+  if (productProfileTitle) productProfileTitle.textContent = profile.title;
+  if (productProfileDescription) productProfileDescription.textContent = profile.description;
+  if (productProfileTags) {
+    productProfileTags.innerHTML = tags.map((tag) => `<span class="profile-tag">${tag}</span>`).join("");
+  }
   productBasisSummary.innerHTML = topAxes
     .map(
       ({ info, score }) => `
@@ -1265,138 +1686,152 @@ function renderProductBasis(scores) {
     )
     .join("");
 
-  const gpuScore = scores.finalScore.GPU || 0;
-  const vramScore = scores.finalScore.VRAM || 0;
-  productBasisDescription.textContent =
-    gpuScore >= 2 || vramScore >= 2
-      ? "각 부품 후보는 위 기준이 실제 제품 스펙으로 어떻게 바뀌는지 보여줍니다. GPU와 VRAM이 높다면 그래픽카드 섹션을 특히 보면 좋아요."
-      : "각 섹션은 앞선 진단 기준과 제품 스펙이 어떻게 연결되는지 확인하기 위한 후보입니다.";
+  productBasisDescription.textContent = "";
+}
+
+function getProductCategoryPriorityScore(category, finalScore = {}) {
+  const weights = productFitAxisWeightsByCategory[category] || {};
+  const entries = Object.entries(weights);
+  if (entries.length === 0) return 0;
+
+  const weightedScore = entries.reduce(
+    (sum, [field, weight]) => sum + (finalScore[field] || 0) * weight,
+    0,
+  );
+  const weightTotal = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  return weightTotal ? weightedScore / weightTotal : 0;
+}
+
+function updateProductSectionPriority(finalScore = {}) {
+  const rankedSections = Object.entries(productSectionContainers)
+    .map(([category, section]) => ({
+      category,
+      section,
+      score: getProductCategoryPriorityScore(category, finalScore),
+    }))
+    .filter(({ section }) => Boolean(section))
+    .sort((a, b) => b.score - a.score);
+
+  rankedSections.forEach(({ section }, index) => {
+    const isPriority = index < 2;
+    section.classList.toggle("is-priority", isPriority);
+    const meta = section.querySelector(".product-section-head span");
+    if (meta) {
+      meta.innerHTML = isPriority
+        ? `<b class="product-section-priority-badge">먼저 보기</b> 추천 후보 3개`
+        : "추천 후보 3개";
+    }
+
+    if (estimateLinkSection) {
+      estimateLinkSection.parentNode.insertBefore(section, estimateLinkSection);
+    }
+  });
 }
 
 function renderProductCards(container, products, scores) {
   if (!container) return;
-  const recommendations = calculateProductRecommendations(products, scores.finalScore).slice(0, 3);
-  container.innerHTML = recommendations
-    .map(
-      (recommendation, index) => {
-        const { product, matchScore, overkillRisk, practicalScore, axisComparisons } =
-          recommendation;
-        const scoreSummary = getProductScoreSummary({
-          matchScore,
-          overkillRisk,
-          practicalScore,
-        });
+  const category = products[0]?.category || container.id.replace("ProductList", "");
+  const displayProducts = filterProductsByChipPreference(products, category);
+  const recommendations = calculateProductRecommendations(displayProducts, scores.finalScore).slice(0, 3);
+  const rows = recommendations
+    .map((recommendation, index) => {
+        const { product, practicalScore } = recommendation;
         const roleLabel = getProductRole(index, product);
         const fitLabel = getProductFitLabel(practicalScore);
+        const specInsightItems = getProductSpecInsightItems(product, recommendation, scores.finalScore);
+        const programFitGroups = getProductProgramFitGroups(product);
 
         return `
-        <article class="product-card">
-          <div class="product-card-head">
-            <div class="product-card-meta">
-              <span class="product-pill product-pill-${getProductRoleTone(roleLabel)}">${escapeHtml(roleLabel)}</span>
-              <span class="product-pill product-pill-${getProductFitTone(practicalScore)}">${escapeHtml(fitLabel)}</span>
+        <details class="product-card">
+          <summary class="product-table-row">
+            <span class="product-summary-name">
+              <b>${index + 1}</b>
+              <strong>${escapeHtml(product.name)}</strong>
+            </span>
+            <span class="product-summary-price">${escapeHtml(getProductPriceLabel(product))}</span>
+            <span class="product-summary-fit">
+              <b class="product-pill product-pill-${getProductFitTone(practicalScore)}">${escapeHtml(fitLabel)}</b>
+            </span>
+            <span class="product-summary-toggle">자세히 보기</span>
+          </summary>
+
+          <div class="product-card-detail">
+            <div class="product-detail-reason">
+              <div class="product-detail-reason-head">
+                <strong>왜 이 후보를 보나요?</strong>
+                <span class="product-pill product-pill-${getProductRoleTone(roleLabel)}">${escapeHtml(roleLabel)}</span>
+              </div>
+              <p>${escapeHtml(getProductReason(recommendation, scores.finalScore))}</p>
+              ${getProductSourceMeta(product)}
             </div>
-            <h2>${escapeHtml(product.name)}</h2>
-            ${getProductSourceMeta(product)}
-            <p>${escapeHtml(product.coreUseCase)}</p>
-          </div>
 
-          <div class="product-score-debug">
-            ${scoreSummary
-              .map(
-                (item) => `
-                  <span>
-                    <strong>${escapeHtml(item.label)}</strong>
-                    <b class="product-pill product-pill-${item.tone}">${escapeHtml(item.value)}</b>
-                  </span>
-                `,
-              )
-              .join("")}
-          </div>
+            <div class="product-spec-insights" aria-label="세부 스펙 해석">
+              ${specInsightItems
+                .map(
+                  (item) => `
+                    <section class="product-spec-insight-card">
+                      <div class="product-spec-insight-head">
+                        <span class="product-spec-icon">${escapeHtml(item.title.slice(0, 2))}</span>
+                        <span>
+                          <strong>${escapeHtml(item.title)}</strong>
+                          <small>${escapeHtml(item.value)}</small>
+                        </span>
+                        <b class="product-importance product-importance-${item.importanceTone}">${escapeHtml(item.importanceLabel)}</b>
+                      </div>
+                      <p>${renderTermText(item.description)}</p>
+                      <div class="product-spec-checkpoint">
+                        <strong>체크 포인트:</strong>
+                        ${renderTermText(item.checkpoint)}
+                      </div>
+                    </section>
+                  `,
+                )
+                .join("")}
+            </div>
 
-          <div class="product-reason">
-            <strong>왜 이 후보를 보나요?</strong>
-            <p>${escapeHtml(getProductReason(recommendation, scores.finalScore))}</p>
-          </div>
+            <div class="product-program-points">
+              <section>
+                <h3>잘 맞는 프로그램</h3>
+                <div class="program-fit-list">
+                  ${renderProgramFitChips(programFitGroups.good, "강하게 맞는 프로그램이 적어요")}
+                </div>
+              </section>
+              <section>
+                <h3>덜 맞는 프로그램</h3>
+                <div class="program-fit-list">
+                  ${renderProgramFitChips(programFitGroups.less, "덜 맞는 프로그램이 적어요")}
+                </div>
+              </section>
+            </div>
 
-          <div class="product-axis-match">
-            ${axisComparisons
-              .slice(0, 2)
-              .map(({ field, title, userScore, productScore }) => {
-                const matchWord = getAxisMatchWord({ field, userScore, productScore });
-                return `
-                  <span>
-                    <strong>${escapeHtml(title)}</strong>
-                    <b class="product-pill product-pill-${getAxisMatchTone(matchWord)}">${escapeHtml(matchWord)}</b>
-                  </span>
-                `;
-              })
-              .join("")}
+            <div class="product-checkline">
+              <strong>제품을 볼 때</strong>
+              <p>${product.buyingChecklist.slice(0, 3).map((item) => escapeHtml(item)).join(" · ")}</p>
+            </div>
           </div>
-
-          <div class="product-spec-row" aria-label="핵심 스펙">
-            ${Object.entries(product.specSummary || {})
-              .slice(0, 3)
-              .map(
-                ([label, value]) => `
-                  <span><strong>${escapeHtml(productSpecLabels[label] || label)}</strong>${escapeHtml(value)}</span>
-                `,
-              )
-              .join("")}
-          </div>
-
-          <div class="product-compact-points">
-            <section>
-              <h3>잘 맞는 경우</h3>
-              <p>${product.recommendedFor.slice(0, 1).map((item) => escapeHtml(item)).join(" · ")}</p>
-            </section>
-            <section>
-              <h3>주의/과잉</h3>
-              <p>${escapeHtml(product.notRecommendedFor[0] || "")} · ${escapeHtml(getFirstSentence(getProductDynamicWarning(recommendation, scores.finalScore)))}</p>
-            </section>
-          </div>
-
-          <div class="product-checkline">
-            <strong>제품을 볼 때</strong>
-            <p>${product.buyingChecklist.slice(0, 3).map((item) => escapeHtml(item)).join(" · ")}</p>
-          </div>
-        </article>
+        </details>
       `;
-      },
-    )
+    })
     .join("");
+
+  container.innerHTML = `
+    <div class="product-table-head" aria-hidden="true">
+      <span>제품명</span>
+      <span>가격</span>
+      <span>적합도</span>
+      <span>상세</span>
+    </div>
+    ${rows}
+  `;
 }
 
 function renderProductList(scores = calculateFinalScores()) {
   renderProductBasis(scores);
+  updateProductSectionPriority(scores.finalScore);
   Object.entries(productListContainers).forEach(([category, container]) => {
     renderProductCards(container, productCatalog[category] || [], scores);
-    updateProductScrollIndicator(category);
   });
 }
-
-function updateProductScrollIndicator(category) {
-  const container = productListContainers[category];
-  const indicator = productScrollIndicators[category];
-  if (!container || !indicator) return;
-
-  const cards = Array.from(container.querySelectorAll(".product-card"));
-  const dots = Array.from(indicator.querySelectorAll("span"));
-  const cardWidth = cards[0]?.getBoundingClientRect().width || container.clientWidth || 1;
-  const activeIndex = Math.min(
-    Math.max(Math.round(container.scrollLeft / cardWidth), 0),
-    Math.max(cards.length - 1, 0),
-  );
-
-  dots.forEach((dot, index) => {
-    const isVisibleDot = index < cards.length;
-    dot.hidden = !isVisibleDot;
-    dot.classList.toggle("active", index === activeIndex);
-  });
-
-  indicator.classList.toggle("is-end", activeIndex >= cards.length - 1);
-}
-
 
 
 function showScreen(screen) {
@@ -1410,29 +1845,33 @@ function showScreen(screen) {
   screen.classList.add("active");
 }
 
-function renderProgramSelection() {
-  programButtons.forEach((button) => {
-    const program = button.dataset.program;
-    const group = button.dataset.group;
-    const isPrimary = primaryPrograms.has(program);
-    const isUsed = usedPrograms.has(program);
-    const isSelected = group === "primary" ? isPrimary : isUsed;
-    const isLocked =
-      group === "primary" && primaryPrograms.size >= 2 && !isPrimary;
+const programUsageLabelMap = {
+  1: "거의 안 씀",
+  2: "가끔 씀",
+  3: "보조로 씀",
+  4: "자주 씀",
+  5: "주력으로 씀",
+};
 
-    button.classList.toggle("selected", isSelected);
-    button.classList.toggle("locked", isLocked);
-    button.setAttribute("aria-pressed", String(isSelected));
-    button.querySelector(".program-check").textContent = isSelected ? "✓" : "";
+function renderProgramSelection() {
+  programRows.forEach((row) => {
+    const program = row.dataset.program;
+    const score = getProgramUsageScore(program);
+    row.classList.toggle("is-active", score >= 3);
+    row.querySelector(".program-rating-value").textContent = `${score}점 · ${programUsageLabelMap[score]}`;
+    row.querySelectorAll(".program-rating-button").forEach((button) => {
+      const isSelected = Number(button.dataset.score) === score;
+      button.classList.toggle("selected", isSelected);
+      button.setAttribute("aria-pressed", String(isSelected));
+    });
   });
 
-  const primaryCount = primaryPrograms.size;
-  const usedCount = usedPrograms.size;
-  programNextButton.disabled = primaryCount !== 2;
+  const activeCount = getHighUsagePrograms(3).length;
+  programNextButton.disabled = false;
   programHelper.textContent =
-    primaryCount === 2
-      ? `주력 2개 선택 완료. 사용 프로그램 ${usedCount}개가 체크되어 있습니다.`
-      : `주력 프로그램을 ${2 - primaryCount}개 더 골라야 다음 단계로 넘어갈 수 있습니다.`;
+    activeCount > 0
+      ? `${activeCount}개 프로그램이 3점 이상으로 반영됩니다.`
+      : "선택하지 않은 프로그램은 1점, 거의 안 쓰는 것으로 처리됩니다.";
 }
 
 function renderQuestion() {
@@ -1459,12 +1898,86 @@ function renderQuestion() {
   });
 }
 
+function getDatabaseProductCounts() {
+  return {
+    cpu: (productCatalog.cpu || []).length,
+    gpu: (productCatalog.gpu || []).length,
+    ram: (productCatalog.ram || []).length,
+    ssd: (productCatalog.ssd || []).length,
+    monitor: (productCatalog.monitor || []).length,
+  };
+}
+
+function formatCount(count) {
+  return Number(count || 0).toLocaleString("ko-KR");
+}
+
+function getLoadingSteps() {
+  const counts = getDatabaseProductCounts();
+  return [
+    "프로그램 사용률과 설문 답변을 작업 기준 점수로 변환중",
+    `다나와 기반 CPU 데이터베이스 ${formatCount(counts.cpu)}개에서 작업 반응성과 렌더링 기준 검색중`,
+    `다나와 기반 그래픽카드 데이터베이스 ${formatCount(counts.gpu)}개에서 GPU·VRAM 기준 검색중`,
+    `다나와 기반 RAM 데이터베이스 ${formatCount(counts.ram)}개에서 멀티태스킹 여유 검색중`,
+    `다나와 기반 SSD 데이터베이스 ${formatCount(counts.ssd)}개에서 속도·용량 기준 검색중`,
+    `다나와 기반 모니터 데이터베이스 ${formatCount(counts.monitor)}개에서 화면 공간과 색 기준 검색중`,
+    "우선순위와 과한 선택 가능성을 비교해 결과 정리중",
+  ];
+}
+
+function renderLoadingStep(activeIndex = 0) {
+  if (!loadingStepText || !loadingStepList) return;
+  const steps = getLoadingSteps();
+  const safeIndex = Math.min(activeIndex, steps.length - 1);
+  loadingStepText.textContent = steps[safeIndex];
+  loadingStepList.innerHTML = steps
+    .slice(0, safeIndex + 1)
+    .map(
+      (step, index) => `
+        <li class="${index < safeIndex ? "done" : ""} ${index === safeIndex ? "active" : ""}">
+          <span>${index + 1}</span>
+          <p>${step}</p>
+        </li>
+      `,
+    )
+    .join("");
+}
+
+function openChipPreferenceModal() {
+  if (!chipPreferenceModal) {
+    startLoading();
+    return;
+  }
+  chipPreferenceModal.classList.add("open");
+  chipPreferenceModal.setAttribute("aria-hidden", "false");
+}
+
+function closeChipPreferenceModal() {
+  if (!chipPreferenceModal) return;
+  chipPreferenceModal.classList.remove("open");
+  chipPreferenceModal.setAttribute("aria-hidden", "true");
+}
+
 function startLoading() {
   showScreen(loadingScreen);
+  let loadingStepIndex = 0;
+  const loadingSteps = getLoadingSteps();
+  renderLoadingStep(loadingStepIndex);
+  const loadingStepTimer = window.setInterval(() => {
+    loadingStepIndex += 1;
+    renderLoadingStep(loadingStepIndex);
+    if (loadingStepIndex >= loadingSteps.length - 1) {
+      window.clearInterval(loadingStepTimer);
+    }
+  }, 1400);
+
   window.setTimeout(() => {
-    renderResult();
-    showScreen(resultScreen);
-  }, 3000);
+    window.clearInterval(loadingStepTimer);
+    const scores = calculateFinalScores();
+    renderResult(scores);
+    renderProductList(scores);
+    showScreen(productScreen);
+  }, 11000);
 }
 
 function fillRandomAnswers() {
@@ -1484,60 +1997,48 @@ if (startButton) {
   startButton.addEventListener("click", goToProgramScreen);
 }
 
-programButtons.forEach((button) => {
-  const label = programLabels[button.dataset.program] || button.textContent.trim();
+programRows.forEach((row) => {
+  const program = row.dataset.program;
+  const label = programLabels[program] || program;
   const helpKeyMap = {
     "로컬 AI 이미지 생성": "localAi",
     "웹 기반 AI 이미지 생성": "webAi",
   };
-  const helpKey = helpKeyMap[button.dataset.program];
+  const helpKey = helpKeyMap[program];
   const helpIcon = helpKey
     ? `<span class="program-help" role="button" tabindex="0" aria-label="${label} 설명 보기" data-term="${helpKey}">?</span>`
     : "";
 
-  button.innerHTML = `
-    <span class="program-label">${label}</span>
-    <span class="program-actions">
+  row.innerHTML = `
+    <div class="program-rating-info">
+      <span class="program-label">${label}</span>
       ${helpIcon}
-      <span class="program-check" aria-hidden="true"></span>
-    </span>
+      <span class="program-rating-value"></span>
+    </div>
+    <div class="program-rating-controls" aria-label="${label} 사용률">
+      <button class="program-rating-button" type="button" data-program="${program}" data-score="1" aria-label="${label} 1점">1</button>
+      <button class="program-rating-button" type="button" data-program="${program}" data-score="2" aria-label="${label} 2점">2</button>
+      <button class="program-rating-button" type="button" data-program="${program}" data-score="3" aria-label="${label} 3점">3</button>
+      <button class="program-rating-button" type="button" data-program="${program}" data-score="4" aria-label="${label} 4점">4</button>
+      <button class="program-rating-button" type="button" data-program="${program}" data-score="5" aria-label="${label} 5점">5</button>
+    </div>
   `;
 });
 
-programButtons.forEach((button) => {
+document.querySelectorAll(".program-rating-button").forEach((button) => {
   button.addEventListener("click", (event) => {
-    const helpTarget = event.target.closest(".program-help");
-    if (helpTarget) {
-      event.stopPropagation();
-      openTermSheet(helpTarget.dataset.term);
-      return;
-    }
-
-    const program = button.dataset.program;
-    const group = button.dataset.group;
-
-    if (group === "primary") {
-      if (primaryPrograms.has(program)) {
-        primaryPrograms.delete(program);
-      } else if (primaryPrograms.size < 2) {
-        primaryPrograms.add(program);
-        usedPrograms.add(program);
-      }
-    }
-
-    if (group === "used") {
-      if (usedPrograms.has(program) && !primaryPrograms.has(program)) {
-        usedPrograms.delete(program);
-      } else {
-        usedPrograms.add(program);
-      }
-    }
-
+    programUsageScores.set(button.dataset.program, Number(button.dataset.score));
     renderProgramSelection();
   });
 });
 
 document.querySelectorAll(".program-help").forEach((helpButton) => {
+  helpButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openTermSheet(helpButton.dataset.term);
+  });
+
   helpButton.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -1547,7 +2048,6 @@ document.querySelectorAll(".program-help").forEach((helpButton) => {
 });
 
 programNextButton.addEventListener("click", (event) => {
-  if (primaryPrograms.size !== 2) return;
   if (event.shiftKey) {
     fillRandomAnswers();
     startLoading();
@@ -1570,12 +2070,20 @@ nextButton.addEventListener("click", () => {
   if (answers[currentQuestionIndex] === null) return;
 
   if (currentQuestionIndex === surveyQuestions.length - 1) {
-    startLoading();
+    openChipPreferenceModal();
     return;
   }
 
   currentQuestionIndex += 1;
   renderQuestion();
+});
+
+chipPreferenceButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    chipPreference = button.dataset.chipPreference || "all";
+    closeChipPreferenceModal();
+    startLoading();
+  });
 });
 
 accordionCards.forEach((card) => {
@@ -1623,24 +2131,24 @@ termSheetBackdrop.addEventListener("click", (event) => {
   }
 });
 
-if (productSearchButton) {
-  productSearchButton.addEventListener("click", () => {
-    renderProductList(calculateFinalScores());
-    showScreen(productScreen);
+function showSimpleResultScreen() {
+  if (!ENABLE_SIMPLE_RESULT_SCREEN) return;
+  renderResult(calculateFinalScores());
+  showScreen(resultScreen);
+}
+
+if (ENABLE_SIMPLE_RESULT_SCREEN) {
+  simpleResultButtons.forEach((button) => {
+    button.addEventListener("click", showSimpleResultScreen);
   });
 }
 
-if (productBackButton) {
-  productBackButton.addEventListener("click", () => {
-    showScreen(resultScreen);
-  });
+function showProductResultScreen() {
+  showScreen(productScreen);
 }
 
-Object.entries(productListContainers).forEach(([category, container]) => {
-  if (!container) return;
-  container.addEventListener("scroll", () => {
-    updateProductScrollIndicator(category);
-  });
+productResultButtons.forEach((button) => {
+  button.addEventListener("click", showProductResultScreen);
 });
 
 document.body.dataset.appReady = "true";
