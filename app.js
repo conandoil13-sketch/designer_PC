@@ -150,6 +150,9 @@ const termDescription = document.querySelector("#termDescription");
 const termCloseButton = document.querySelector("#termCloseButton");
 const chipPreferenceModal = document.querySelector("#chipPreferenceModal");
 const chipPreferenceButtons = Array.from(document.querySelectorAll("[data-chip-preference]"));
+const referenceOpenButton = document.querySelector("#referenceOpenButton");
+const referenceModal = document.querySelector("#referenceModal");
+const referenceCloseButton = document.querySelector("#referenceCloseButton");
 const profileTitle = document.querySelector("#profileTitle");
 const profileDescription = document.querySelector("#profileDescription");
 const profileTags = document.querySelector("#profileTags");
@@ -1960,6 +1963,20 @@ function closeChipPreferenceModal() {
   chipPreferenceModal.hidden = true;
 }
 
+function openReferenceModal() {
+  if (!referenceModal) return;
+  referenceModal.hidden = false;
+  referenceModal.classList.add("open");
+  referenceModal.setAttribute("aria-hidden", "false");
+}
+
+function closeReferenceModal() {
+  if (!referenceModal) return;
+  referenceModal.classList.remove("open");
+  referenceModal.setAttribute("aria-hidden", "true");
+  referenceModal.hidden = true;
+}
+
 function startLoading() {
   showScreen(loadingScreen);
   let loadingStepIndex = 0;
@@ -1998,6 +2015,16 @@ window.cpuMasterGoToProgramScreen = goToProgramScreen;
 if (startButton) {
   startButton.addEventListener("click", goToProgramScreen);
 }
+
+referenceOpenButton?.addEventListener("click", openReferenceModal);
+referenceCloseButton?.addEventListener("click", closeReferenceModal);
+referenceModal?.addEventListener("click", (event) => {
+  if (event.target === referenceModal) closeReferenceModal();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeReferenceModal();
+});
 
 programRows.forEach((row) => {
   const program = row.dataset.program;
