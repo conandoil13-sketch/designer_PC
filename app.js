@@ -1746,14 +1746,16 @@ function renderProductCards(container, products, scores) {
 
         return `
         <details class="product-card">
-          <summary class="product-table-row">
-            <span class="product-summary-name">
-              <b>${index + 1}</b>
-              <strong>${escapeHtml(product.name)}</strong>
-            </span>
-            <span class="product-summary-price">${escapeHtml(getProductPriceLabel(product))}</span>
-            <span class="product-summary-fit">
-              <b class="product-pill product-pill-${getProductFitTone(practicalScore)}">${escapeHtml(fitLabel)}</b>
+          <summary class="product-table-summary">
+            <span class="product-table-row">
+              <span class="product-summary-name">
+                <b>${index + 1}</b>
+                <strong>${escapeHtml(product.name)}</strong>
+              </span>
+              <span class="product-summary-price">${escapeHtml(getProductPriceLabel(product))}</span>
+              <span class="product-summary-fit">
+                <b class="product-pill product-pill-${getProductFitTone(practicalScore)}">${escapeHtml(fitLabel)}</b>
+              </span>
             </span>
             <span class="product-summary-toggle">자세히 보기</span>
           </summary>
@@ -1822,7 +1824,6 @@ function renderProductCards(container, products, scores) {
       <span>제품명</span>
       <span>가격</span>
       <span>적합도</span>
-      <span>상세</span>
     </div>
     ${rows}
   `;

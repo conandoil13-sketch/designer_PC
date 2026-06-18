@@ -1182,16 +1182,21 @@ h2 {
   display: none;
 }
 
+.product-table-summary {
+  display: block;
+  cursor: pointer;
+}
+
 .product-table-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px 66px 68px;
+  grid-template-columns: minmax(0, 1fr) 86px 72px;
   align-items: center;
   gap: 8px;
 }
 
 .product-table-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px 66px 68px;
+  grid-template-columns: minmax(0, 1fr) 86px 72px;
   align-items: center;
   gap: 8px;
 }
@@ -1207,18 +1212,16 @@ h2 {
 }
 
 .product-table-head span:nth-child(2),
-.product-table-head span:nth-child(3),
-.product-table-head span:nth-child(4) {
+.product-table-head span:nth-child(3) {
   text-align: center;
 }
 
 .product-table-row {
-  min-height: 42px;
-  padding: 7px 8px;
-  cursor: pointer;
+  min-height: 58px;
+  padding: 10px;
 }
 
-.product-table-row:focus-visible {
+.product-table-summary:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.22);
   outline-offset: -3px;
 }
@@ -1247,14 +1250,14 @@ h2 {
 .product-summary-name strong {
   min-width: 0;
   color: var(--ink);
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.18;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .product-summary-price {
   color: var(--ink);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 900;
   line-height: 1.2;
   text-align: center;
@@ -1271,23 +1274,26 @@ h2 {
 }
 
 .product-summary-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  padding: 5px 6px;
-  font-size: 10px;
-  font-weight: 900;
+  min-height: 36px;
+  margin: 0 10px 10px;
+  border: 1px solid #dbe2ea;
+  border-radius: 7px;
+  background: #f7f9fb;
+  color: #374151;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1.2;
   text-align: center;
-  white-space: nowrap;
 }
 
 .product-card[open] .product-summary-toggle {
-  background: var(--accent-dark);
+  border-color: #cbd5e1;
+  background: #f0f3f6;
+  color: #1f2937;
 }
 
 .product-card[open] .product-summary-toggle::before {
@@ -1299,7 +1305,7 @@ h2 {
 }
 
 .product-card[open] .product-summary-toggle::before {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .product-card-detail {
